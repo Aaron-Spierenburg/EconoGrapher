@@ -1,3 +1,5 @@
+'Module to access historical data from Investing.com and create formatted csv to analyze'
+
 import re, pandas as pd, decimal,json,bs4,os
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -9,19 +11,20 @@ from selenium.webdriver.support import expected_conditions as EC
 
 
 def toDecimalConversion(number,quant=20):
+    'Convert to Decimal for accuracy lost in float-types'
     quant = decimal.Decimal(str(quant))
     quant = 1*10**(-quant)
     decimal_return = decimal.Decimal(str(number)).quantize(quant)
     return decimal_return
 
 def event_sources():
-    with open(r'events_sources.json', 'r') as json_file:
-        sources_json=json.load(json_file)
-    links=[]
-    for k,v in sources_json.items():
-            for k2,v2 in v.items():
-                links.append((k,k2,v2))
-
+        with open(r'events_sources.json', 'r') as json_file:
+            sources_json=json.load(json_file)
+        links=[]
+        for k,v in sources_json.items():
+                for k2,v2 in v.items():
+                    links.append((k,k2,v2))
+        return links
 
 def check_end_of_consensus(source:str)->bool:
     'check if last entry has consensus after clicking "see more"'
@@ -44,6 +47,11 @@ def check_end_of_consensus(source:str)->bool:
 
 
 def extract_from_html(source:str,country,event_name):
+    '''Function that takes the source html and converts it to a csv for analysis on the graphing file
+    \nIs called when the parser determines there are no longer any releases with a consensus value
+    \nsource: is passed the driver.page_source information with is html string
+    \ncountry & event_name: are determined by the event_sources.json file to assist in adding files to Data/
+    '''
     extractDF = pd.DataFrame(columns=['Date','Time','Actual','Consensus'])
     soup = bs4.BeautifulSoup(source,'html.parser')
     source = soup.prettify()
@@ -126,18 +134,23 @@ def extract_from_html(source:str,country,event_name):
     extractDFDates.to_csv(f'Data\\{country}\\{event_name}.csv')
 
 
-def gather_data(links:list,event:int=0,clicks:int=0):
+def gather_data(event:int=0,clicks:int=0):
+    'function to access website, and retrieve the html source code, passing on to extract_from_html()'
     def x_button_find():
         x_button = WebDriverWait(driver, 0.4).until(
             EC.element_to_be_clickable((By.XPATH, '//i[@class="popupCloseIcon largeBannerCloser"]')))
         if x_button:
             x_button.click()
         return 1
+    
+    links = event_sources()
     events_to_get = len(links)
     link:str = links[event][2]
     link_num = link[link.index('-',-4)+1:]
     driver = webdriver.Chrome()
     driver.set_page_load_timeout(6)
+
+
     try:
         driver.get(link)
     except TimeoutException:
@@ -162,7 +175,7 @@ def gather_data(links:list,event:int=0,clicks:int=0):
                     driver.quit()
                     extract_from_html(html,links[event][0],links[event][1])
                     if event <events_to_get-1:
-                        gather_data(links,event+1)
+                        gather_data(event=(event+1))
                         break
                     else: break
                         
